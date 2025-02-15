@@ -83,8 +83,10 @@ app.post('/getVideoComments', async (req, res) => {
 
 app.post('/chat', async (req, res) => {
   try {
+      var url = new URL(req.body.url)
+      const videoId = url.searchParams.get('v')
       // Fetch and format YouTube comments
-      let comments = (await getComments(req.body.videoId))
+      let comments = (await getComments(videoId))
           .map((c, i) => `${i + 1}. ${c.text}`)
           .join("\n");
 
