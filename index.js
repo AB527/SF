@@ -82,26 +82,49 @@ app.post('/getVideoComments', async (req, res) => {
 })
 
 app.post('/chat', async (req, res) => {
-  let comments = (await getComments(req.body.videoId)).map((c,i)=>`${i+1}. ${c.text}`).join("\n")
-  const generationConfig = {
-    temperature: 1,
-    topP: 0.95,
-    topK: 40,
-    maxOutputTokens: 8192,
-    responseMimeType: "text/plain",
-  };
-  console.log(req.body.history)
-  const chatSession = model.startChat({
-    generationConfig,
-    history: [{role: "system", content: `You are an assistant that helps analyze YouTube comments. Following are the comments made by different users on the video posted by 
-    comments: 
-    ${comments}`}, ...req.body.history],
-  });
+  try {
+      // Fetch and format YouTube comments
+      let comments = (await getComments(req.body.videoId))
+          .map((c, i) => `${i + 1}. ${c.text}`)
+          .join("\n");
 
-  const result = await chatSession.sendMessage(req.body.newInput);
-  console.log(result.response.text());
-  res.send({content: result.response.text()})
-})
+      // Define generation settings
+      const generationConfig = {
+          temperature: 1,
+          topP: 0.95,
+          topK: 40,
+          maxOutputTokens: 8192,
+          responseMimeType: "text/plain",
+      };
+
+      console.log(req.body.history);
+
+      // Ensure first message is from 'user', moving 'system' content into 'user'
+      let history = req.body.history || [];
+      if (history.length === 0) {
+          history.push({
+              role: "user",
+              parts: [{
+                  text: `You are an assistant that helps analyze YouTube comments. Here are the comments:\n\n${comments}`
+              }]
+          });
+      }
+
+      // Start chat session
+      const chatSession = model.startChat({ generationConfig, history });
+
+      // Send user's latest message
+      const result = await chatSession.sendMessage(req.body.newInput);
+
+      console.log(result.response.text());
+      res.send({ content: result.response.text() });
+
+  } catch (error) {
+      console.error("Error in chat processing:", error);
+      res.status(500).send({ error: "Something went wrong" });
+  }
+});
+
 
 app.listen(port, () => {
   console.log(`App listening on port ${port}`)
