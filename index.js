@@ -49,7 +49,9 @@ app.post('/getChannelId', async (req, res) => {
 })
 
 app.post('/getContentAnalysis', async (req, res) => {
-  let comments = await getComments(req.body.videoId);
+  var url = new URL(req.body.url)
+  const videoId = url.searchParams.get('v')
+  let comments = await getComments(videoId);
   res.send(await executeCommentAnalysis({}, comments))
 })
 
