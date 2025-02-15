@@ -83,8 +83,8 @@ app.post('/getVideoComments', async (req, res) => {
 
 app.post('/chat', async (req, res) => {
   try {
-      var url = new URL(req.body.url)
-      const videoId = url.searchParams.get('v')
+      const url = new URL(req.body.url);
+      const videoId = url.searchParams.get('v');
       // Fetch and format YouTube comments
       let comments = (await getComments(videoId))
           .map((c, i) => `${i + 1}. ${c.text}`)
@@ -101,17 +101,20 @@ app.post('/chat', async (req, res) => {
 
       console.log(req.body.history);
 
-      // Ensure first message is from 'user', moving 'system' content into 'user'
+      // Ensure first message is from 'user' with correct format
       let history = req.body.history || [];
-      if (history.length === 0) {
-          history.push({
-              role: "user",
-              parts: [{
-                  text: `You are an assistant that helps analyze YouTube comments. Here are the comments:\n\n${comments}`
-              }]
-          });
-      }
+      history.unshift({
+          role: "user",
+          parts: [{ text: `You are an assistant that helps analyze YouTube comments. Here are the comments:\n\n${comments}` }]
+      });
 
+      // Convert history messages to correct format (ensuring 'parts' is an array)
+      history = history.map(msg => ({
+          role: msg.role,
+          parts: Array.isArray(msg.parts) ? msg.parts : [{ text: msg.content }]
+      }));
+
+      console.log(history)
       // Start chat session
       const chatSession = model.startChat({ generationConfig, history });
 
@@ -126,7 +129,6 @@ app.post('/chat', async (req, res) => {
       res.status(500).send({ error: "Something went wrong" });
   }
 });
-
 
 app.listen(port, () => {
   console.log(`App listening on port ${port}`)
