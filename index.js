@@ -81,23 +81,8 @@ app.post('/getVideoComments', async (req, res) => {
   res.send((await getComments(req.body.videoId)).map((c,i)=>`${i+1}. ${c.text}`).join("\n"))
 })
 
-app.post('/getSummary', async (req, res) => {
-  var url = new URL(req.body.url)
-  const videoId = url.searchParams.get('v')
-  let videoDetails = await getVideoDetails(videoId)
-  let comments = await getComments(videoId)
-  const result = await model.generateContent(`summarise and give suggestions that the creator can do to improve his videos based on the following comments in 300 words, output only in this format and nothing else :
-Summary: ......
-Suggestions: .......
-comments: 
-${comments.map((c,i)=>`${i+1}. ${c.text}`).join("\n")}`);
-  console.log(result.response.text());
-res.send({
-  summary: result.response.text()
-})
-})
-
 app.post('/chat', async (req, res) => {
+  let comments = (await getComments(req.body.videoId)).map((c,i)=>`${i+1}. ${c.text}`).join("\n")
   const generationConfig = {
     temperature: 1,
     topP: 0.95,
@@ -105,14 +90,17 @@ app.post('/chat', async (req, res) => {
     maxOutputTokens: 8192,
     responseMimeType: "text/plain",
   };
+  console.log(req.body.history)
   const chatSession = model.startChat({
     generationConfig,
-    history: req.body.history,
+    history: [{role: "system", content: `You are an assistant that helps analyze YouTube comments. Following are the comments made by different users on the video posted by 
+    comments: 
+    ${comments}`}, ...req.body.history],
   });
 
-  const result = await chatSession.sendMessage(req.body.new_input);
+  const result = await chatSession.sendMessage(req.body.newInput);
   console.log(result.response.text());
-  res.send({msg: result.response.text()})
+  res.send({content: result.response.text()})
 })
 
 app.listen(port, () => {
@@ -197,7 +185,7 @@ const executeCommentAnalysis = async (video_details, comments) => {
       // "stop": null
     });
 
-    console.log(chatCompletion.choices[0].message.content);
+    // console.log(chatCompletion.choices[0].message.content);
     
     // console.log(chatCompletion.choices[0].message.content)
     console.log("Chunk done "+i)
@@ -220,8 +208,6 @@ const executeCommentAnalysis2 = async (video_details, comments) => {
 
   const commentsAnalysis = result.response.text().split("Summary:")[0].replace("\n\n", "")
 
-  console.log(commentsAnalysis.split(","))
-  console.log(result.response.text())
   return {
     comments: decodeCommentAnalysis(comments, commentsAnalysis),
     summary: result.response.text().split("Summary:")[1].split("Suggestions:")[0],
