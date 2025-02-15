@@ -9,9 +9,9 @@ const port = process.env.PORT || 3000
 app.use(express.json())
 app.use(cors())
 
-// const client = new Groq({
-//   apiKey: process.env.GROQ_API_KEY, // This is the default and can be omitted
-// });
+const client = new Groq({
+  apiKey: process.env.GROQ_API_KEY, // This is the default and can be omitted
+});
 
 app.get('/', (req, res) => {
     res.send('Hello World!')
@@ -50,8 +50,7 @@ app.post('/getChannelId', async (req, res) => {
 
 app.post('/getContentAnalysis', async (req, res) => {
   let comments = await getComments(req.body.videoId);
-  executeCommentAnalysis(comments.map((c,i)=>`${i+1}. ${c.text}`).join("\n"))
-  res.send(comments)
+  res.send(await executeCommentAnalysis({}, comments))
 })
 
 app.post('/verifyContentUrl', async (req, res) => {
@@ -82,13 +81,75 @@ function decodeCommentAnalysis(comments, analysis) {
   }
 }
 
-const executeCommentAnalysis = async (video_details, comments) => {
-  const chatCompletion = await client.chat.completions.create({
-    messages: [{ role: 'user', content: 'Explain the importance of low latency LLMs' }],
-    model: 'llama-3.1-8b-instant',
-  });
+const chunkArray = (comments, maxChars = 10000) => {
+  let chunks = [];
+  let currentChunk = [];
+  let currentLength = 0;
 
-  decodeCommentAnalysis(comments, chatCompletion.choices[0].message.content)
+  for (let comment of comments) {
+    if (currentLength + comment.length > maxChars) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+      currentLength = 0;
+    }
+    currentChunk.push(comment);
+    currentLength += comment.length;
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+};
+
+const executeCommentAnalysis = async (video_details, comments) => {
+
+//   console.log(`comment classification proompt - Perform sentiment analysis on the following comments of a youtube news video and classify it as one of the given labels: the text is hindi written as english, is given in individual numerical points. the output should only contain the bullet point number then label and nothing else. ignore the youtube links and html tags
+// Labels
+// - very negative
+// - negative
+// - neutral
+// - positive
+// - very positive
+
+// comments: 
+// ${commentsA}`)
+let results = [];
+// console.log(comments.length)
+  let commentChunks = chunkArray(comments.map(c=>c.text));
+  console.log(commentChunks.length)
+  var initLimit = commentChunks[0].length
+  commentChunks = commentChunks.map(ch=>ch.map((c,i)=>`${i+1}. ${c}`).join("\n"))
+  // console.log(commentChunks)
+  var i = 0;
+  for (const chunk of commentChunks) {
+    // console.log(chunk.length)
+    console.log("Chunk started")
+    const chatCompletion = await client.chat.completions.create({
+      messages: [{ role: 'user', content: `comment classification prompt - Perform sentiment analysis on the following comments of a youtube news video and classify it as one of the given labels: the text is hindi written as english, is given in individual numerical points. the output should only contain the bullet point number then label and nothing else. ignore the youtube links and html tags
+  Labels
+  - very negative
+  - negative
+  - neutral
+  - positive
+  - very positive
+  
+  comments: 
+  ${chunk}` }],
+      model: 'llama-3.1-8b-instant',
+    });
+    console.log("Chunk done "+i)
+    i++;
+    // console.log(chatCompletion.choices[0].message.content)
+    results.push(chatCompletion.choices[0].message.content)
+    // console.log(decodeCommentAnalysis(comments, chatCompletion.choices[0].message.content))
+    // results.push(decodeCommentAnalysis(comments, chatCompletion.choices[0].message.content))
+    // console.log(chunk)
+    break;
+  }
+
+  return decodeCommentAnalysis(comments.slice(0,initLimit), results.join("\n"));
 }
 
 const getComments = async (videoId) => {
