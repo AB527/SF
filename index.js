@@ -2,10 +2,12 @@ require("dotenv").config()
 const axios = require('axios');
 const Groq = require('groq-sdk');
 const express = require('express')
+const cors = require("cors")
 const verifyURL = require("./verifyUrl")
 const app = express()
 const port = process.env.PORT || 3000
 app.use(express.json())
+app.use(cors())
 
 // const client = new Groq({
 //   apiKey: process.env.GROQ_API_KEY, // This is the default and can be omitted
