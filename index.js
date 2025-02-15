@@ -114,7 +114,6 @@ app.post('/chat', async (req, res) => {
           parts: Array.isArray(msg.parts) ? msg.parts : [{ text: msg.content }]
       }));
 
-      console.log(history)
       // Start chat session
       const chatSession = model.startChat({ generationConfig, history });
 
