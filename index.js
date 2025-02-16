@@ -29,36 +29,45 @@ app.get('/', (req, res) => {
     res.send('Hello World!')
 })
 
-app.post('/getChannelData', async (req, res) => {
+const getChannelData = async (curl) => {
+  let channelId = await getChannelId(curl);
   let videos = [];
   let nextPageToken = "";
-  do {
-    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${req.body.channelId}&maxResults=50&type=video&pageToken=${nextPageToken}&key=${process.env.YOUTUBE_API_KEY}&order=date`;
-    const response = await axios.get(url);
-    
-    response.data.items.forEach(video => {
-      videos.push({
-        title: video.snippet.title,
-        videoId: video.id.videoId
-      });
+
+  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&maxResults=15&type=video&pageToken=${nextPageToken}&key=${process.env.YOUTUBE_API_KEY}&order=date`;
+  const response = await axios.get(url);
+
+  response.data.items.forEach(video => {
+    videos.push({
+      title: video.snippet.title,
+      videoId: video.id.videoId,
+      thumbnail: video.snippet.thumbnails.high.url,
+      videoUrl: `https://www.youtube.com/watch?v=${video.id.videoId}` 
     });
+  });
 
-    nextPageToken = response.data.nextPageToken || "";
-  } while (nextPageToken);
+  return videos;
+}
 
-  res.send(videos)
-})
+app.post('/getChannelData', async (req, res) => {
+  res.send(await getChannelData(req.body.url))
+});
+
 
 app.post('/getChannelId', async (req, res) => {
-  const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${req.body.CHANNEL_HANDLE}&type=channel&key=${process.env.YOUTUBE_API_KEY}`;
+  let channelId = await getChannelId(req.body.url)
+  res.send({success: !!channelId.length, msg: channelId})
+})
+
+const getChannelId = async (url) => {
+  const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${url.split("@")[1].split("/")[0]}&type=channel&key=${process.env.YOUTUBE_API_KEY}`;
   const searchResponse = await axios.get(searchUrl);
   
   if (searchResponse.data.items.length === 0) {
-    return res.send({success: false, msg: "Channel not found"})
+    return ""
   }
-
-  res.send({success: true, msg: searchResponse.data.items[0].id.channelId})
-})
+  return searchResponse.data.items[0].id.channelId
+}
 
 app.post('/getContentAnalysis', async (req, res) => {
   var url = new URL(req.body.url)
@@ -67,6 +76,20 @@ app.post('/getContentAnalysis', async (req, res) => {
   let comments = await getComments(videoId);
   res.send(await executeCommentAnalysis2(videoDetails, comments))
 })
+
+app.post('/getChannelAnalysis', async (req, res) => {
+  let videos = await getChannelData(req.body.url);
+  res.send({
+    "stats": {
+      "1": 0,
+      "2": 2,
+      "3": 2,
+      "4": 9,
+      "5": 133
+    },
+    videos: videos
+  })
+});
 
 app.post('/verifyContentUrl', async (req, res) => {
   try {
