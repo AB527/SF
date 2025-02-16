@@ -104,14 +104,15 @@ app.post('/getContentAnalysis', async (req, res) => {
 app.post('/getChannelAnalysis', async (req, res) => {
   try {
     let videos = await getChannelData(req.body.url);
+    let comments = []
+    for(var v of videos.slice(0,5)) {
+      comments.push(await getComments(v.videoId))
+    }
     res.send({
-      "stats": {
-        "1": 0,
-        "2": 2,
-        "3": 2,
-        "4": 9,
-        "5": 133
-      },
+      ...await executeCommentAnalysis3({
+        title: req.body.url.split("@")[1].split("/")[0],
+        videos: videos
+      }, comments),
       videos: videos
     });
   } catch (error) {
@@ -207,6 +208,36 @@ function decodeCommentAnalysis(comments, analysis) {
   };
 }
 
+function decodeCommentAnalysis2(analysis) {
+  const wordToCode = ["very negative", "negative", "neutral", "positive", "very positive"];
+
+  analysis = analysis.split(",")
+    .filter(l => l !== undefined && l !== "")
+    .map(l => wordToCode.indexOf(l) + 1);
+
+  let stats = analysis.reduce((acc, curr) => {
+    let key = curr.toString();
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  // Remove any key not in the range 1-5
+  stats = Object.fromEntries(
+    Object.entries(stats).filter(([key]) => key >= '1' && key <= '5')
+  );
+
+  // Ensure keys 1-5 exist with default value 0 if missing
+  for (let i = 1; i <= 5; i++) {
+    let key = i.toString();
+    if (!(key in stats)) {
+      stats[key] = 0;
+    }
+  }
+
+  return stats;
+}
+
+
 const chunkArray = (comments, maxChars = 10000) => {
   let chunks = [];
   let currentChunk = [];
@@ -273,6 +304,25 @@ const executeCommentAnalysis2 = async (video_details, comments) => {
       comments: decodeCommentAnalysis(comments, commentsAnalysis),
       summary: result.response.text().split("Summary:")[1].split("Suggestions:")[0],
       suggestions: result.response.text().split("Summary:")[1].split("Suggestions:")[1]
+    };
+  } catch (error) {
+    console.error("Error in comment analysis 2:", error);
+    throw new Error("Failed to analyze comments");
+  }
+};
+
+const executeCommentAnalysis3 = async (channel_details, comments) => {
+  console.log(comments.length)
+  let comment2=comments.map((v,i)=>`\nVideo: ${channel_details.videos[i].title}\n\n${v.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}`).join("\n")
+  // console.log(comment2)
+  try {
+    const result = await model.generateContent(`Perform sentiment analysis on the following comments of latest five youtube videos of youtube channel "${channel_details.videos[0].title}" and classify it as one of the given labels. the text is hindi written as english, is given in individual numerical points. the output should only contain comma separated labels without space for every comment of every video, together and nothing else. ignore the youtube links and html tags.
+  Labels: very negative, negative, neutral, positive, very positive.
+  comments:
+  ${comment2}`);
+
+    return {
+      stats: decodeCommentAnalysis2(result.response.text())
     };
   } catch (error) {
     console.error("Error in comment analysis 2:", error);
